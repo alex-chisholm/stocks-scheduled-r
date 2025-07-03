@@ -1,0 +1,92 @@
+---
+title: "Airline Stock Trends"
+subtitle: "A scheduled report via GitHub Actions"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+Last Update: ``r Sys.time()``
+
+# Overview
+
+This report updates daily with the most recent stock values for the four largest airlines in the United States. 
+
+| Airline       | Ticker |
+|---------------|--------|
+| American      | AAL    |
+| Delta         | DAL    |
+| Southwest     | LUV    |
+| United        | UAL    |
+
+
+
+# Get the data
+
+We'll use the [quantmod](https://www.quantmod.com/) package to get the most recent stock data for these companies. 
+
+```{r setup}
+library(quantmod)
+library(tidyverse)
+library(DT)
+library(scales)
+
+tickers <- c("AAL", "DAL", "LUV",  "UAL")
+
+start_date <- Sys.Date() - 365
+end_date <- Sys.Date()
+
+getSymbols(tickers, src = "yahoo", from = start_date, to = end_date, auto.assign = TRUE)
+
+stocks_list <- lapply(tickers, function(ticker) {
+  data <- get(ticker)
+  data.frame(
+    Date = index(data),
+    Price = as.numeric(Ad(data)),
+    Ticker = ticker
+  )
+})
+
+stocks_df <- bind_rows(stocks_list) %>%
+  group_by(Ticker) %>%
+  arrange(Date) %>%
+  mutate(
+    starting_value = first(Price),
+    p_change = (Price - starting_value) / starting_value
+  )
+
+stocks_df %>% datatable(rownames=FALSE)
+```
+
+# Most Recent Data
+
+```{r}
+stocks_df %>%
+    filter(Date == max(Date)) %>%
+    select(-starting_value) %>%
+    rename(`1-Year Percentage Change` = p_change) %>%
+    datatable(rownames=FALSE) %>%
+        formatCurrency(2, digits = 2) %>%
+        formatPercentage(4, digits = 0)
+```
+
+# Past Year
+
+```{r}
+ggplot(stocks_df, aes(x = Date, y = p_change, color = Ticker)) +
+  geom_line(size = 1) +
+  geom_hline(yintercept = 0) +
+  labs(title = "One-Year Percentage Change in Closing Price",
+       x = NULL,
+       y = NULL) +
+  theme_minimal() +
+  scale_y_continuous(label= percent)
+```
+
